@@ -1,0 +1,30 @@
+name: test
+
+# Start with the lamp recipe
+recipe: lamp
+config:
+  xdebug: true
+  php: "8.3"
+  composer_version: 2-latest
+  webroot: public
+  database: postgres
+services:
+  appserver:
+    overrides:
+      environment:
+        XDEBUG_MODE: "debug,develop"
+tooling:
+  xdebug-on:
+    service: appserver
+    description: Enable Xdebug.
+    user: root
+    cmd:
+      - docker-php-ext-enable xdebug && kill -USR2 $(pgrep -o php-fpm) > /dev/null || /etc/init.d/apache2 reload
+      - tput setaf 2 && echo "Xdebug On" && tput sgr 0 && echo
+  xdebug-off:
+    service: appserver
+    description: Disable Xdebug.
+    user: root
+    cmd:
+      - rm /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini && kill -USR2 $(pgrep -o php-fpm) > /dev/null || /etc/init.d/apache2 reload
+      - tput setaf 1 && echo "Xdebug Off" && tput sgr 0 && echo
