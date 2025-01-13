@@ -7,7 +7,7 @@ class Model
 
     public function __construct()
     {
-        $config = require __DIR__.'/../../config/database.php';
+        $config = require __DIR__ . '/../../config/database.php';
         $this->pdo = Database::getInstance($config['host'], $config['database'], $config['username'], $config['password'])->getPDO();
     }
 
@@ -42,6 +42,44 @@ class Model
         $placeholders = ':' . implode(', :', array_keys($data));
         $stmt = $this->pdo->prepare("INSERT INTO {$this->table} ($columns) VALUES ($placeholders)");
         return $stmt->execute($data);
+    }
+
+    public function insert(array $data)
+    {
+        $columns = implode(', ', array_keys(reset($data)));
+        $values = [];
+
+        foreach ($data as $row) {
+            $placeholder = implode(', ', array_fill(0, count($row), '?'));
+            $column = array_keys($row);
+            $placeholders[] = "({$placeholder})";
+            foreach ($column as $value) {
+                $values[] = $row[$value];
+            }
+        }
+
+        $sql = "INSERT INTO example_table ({$columns}) VALUES " . implode(", ", $placeholders);
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute($values);
+    }
+
+    public function upsert($field, array $data)
+    {
+        $columns = implode(', ', array_keys(reset($data)));
+        $values = [];
+
+        foreach ($data as $row) {
+            $placeholder = implode(', ', array_fill(0, count($row), '?'));
+            $column = array_keys($row);
+            $placeholders[] = "({$placeholder})";
+            foreach ($column as $value) {
+                $values[] = $row[$value];
+            }
+        }
+
+        $sql = "INSERT INTO {$this->table} ({$columns}) VALUES " . implode(", ", $placeholders) . " ON CONFLICT ({$field}) DO UPDATE SET value = EXCLUDED.value";
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute($values);
     }
 
     public function update($id, $data)

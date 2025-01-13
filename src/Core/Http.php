@@ -13,8 +13,11 @@ class Http
         $this->url = !empty($_SERVER['REQUEST_URL']) ? $_SERVER['REQUEST_URL'] : $_SERVER['REQUEST_URI'];
     }
 
-    public function getUrl()
+    public function getUrl($method = 'GET')
     {
+        if ($_SERVER['REQUEST_METHOD'] !== $method) {
+            return false;
+        }
         // The request url might be /project/index.php, this will remove the /project part
         $url = (php_sapi_name() !== 'cli-server') ? str_replace(dirname($this->request['SCRIPT_NAME']), '', $this->url) : $this->url;
         // Remove the query string if there is one

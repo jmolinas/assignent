@@ -45,38 +45,44 @@ class Router
         return '/^' . $route . '?$/';
     }
 
-    public function route($url, $callback)
+
+    public function get($url, $callback)
     {
         $pattern = $this->pattern($url);
-        $this->routes[$pattern] = $callback;
+        $this->routes['GET'][$pattern] = $callback;
+        return $this;
+    }
+
+    public function post($url, $callback)
+    {
+        $pattern = $this->pattern($url);
+        $this->routes['POST'][$pattern] = $callback;
         return $this;
     }
 
     public function execute()
     {
-        $uri = $this->http->getUrl();
-        $match = false;
-        foreach ($this->routes as $pattern => $callback) {
-            if (preg_match($pattern, $uri, $args) === 1) {
-                $match = true;
-                $arguments = [];
-                array_shift($args);
-                foreach ($this->arguments as $key => $value) {
-                    $arguments[$value] = $args[$key];
-                }
+        foreach ($this->routes as $method => $route) {
+            $uri = $this->http->getUrl($method);
+            foreach ($route as $pattern => $callback) {
+                if (preg_match($pattern, $uri, $args) === 1) {
+                    $arguments = [];
+                    array_shift($args);
+                    foreach ($this->arguments as $key => $value) {
+                        $arguments[$value] = $args[$key];
+                    }
 
-                $values = $this->parameters($callback, $arguments);
-                $function = call_user_func_array($callback, $values);
-                if ($function === false) {
-                    break;
+                    $values = $this->parameters($callback, $arguments);
+                    $function = call_user_func_array($callback, $values);
+                    if ($function === false) {
+                        break;
+                    }
+                    return true;
                 }
-                return true;
-            }
-
-            if (!$match) {
-                header('HTTP/1.0 404 Not Found');
-                echo 'Page Not Found';
             }
         }
+        header('HTTP/1.0 404 Not Found');
+        echo 'Page Not Found';
+        return false;
     }
 }
