@@ -13,6 +13,32 @@ class Http
         $this->url = !empty($_SERVER['REQUEST_URL']) ? $_SERVER['REQUEST_URL'] : $_SERVER['REQUEST_URI'];
     }
 
+    public function getRequestHeaders()
+    {
+        $headers = array();
+        foreach ($_SERVER as $key => $value) {
+            if ($key != 'CONTENT_TYPE') {
+                if (substr($key, 0, 5) <> 'HTTP_') {
+                    continue;
+                }
+            }
+            $trim = $key != 'CONTENT_TYPE' ? strtolower(substr($key, 5)) : strtolower($key);
+            $header = str_replace(' ', '-', ucwords(str_replace('_', ' ', $trim)));
+            $headers[$header] = $value;
+        }
+        return $headers;
+    }
+
+    public function imput($key = null)
+    {
+        $header = $this->getRequestHeaders();
+        if (isset($header['Content-Type']) && $header['Content-Type'] == 'application/json') {
+            $data = json_decode(file_get_contents('php://input'), true);
+            return $key !== null ? $data[$key] : $data;
+        }
+    }
+
+
     public function getUrl($method = 'GET')
     {
         if ($_SERVER['REQUEST_METHOD'] !== $method) {
@@ -38,7 +64,7 @@ class Http
 
         // Make sure the URI ends in a /
         $url = rtrim($url, '/') . '/';
-        
+
         // Replace multiple slashes in a url, such as /my//dir/url
         $url = preg_replace('/\/+/', '/', $url);
         return $url;

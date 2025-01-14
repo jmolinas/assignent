@@ -9,7 +9,10 @@ $router = new Router($http);
 $router->get('/searchjkj', function () {
     echo 'hahaha';
 });
-$router->post('/search', function () use ($view) {
+$router->post('/search', function () use ($view, $http) {
+    $headers = $http->getRequestHeaders();
+    print_r($headers);
+    exit;
     $fileImport = new FileImport('xml');
     $files = $fileImport->scanFolder();
     $books = [];
@@ -22,8 +25,8 @@ $router->post('/search', function () use ($view) {
             }
             exit;
         }
-        foreach ($booksList as $key => $book) {
-            $books[] = ['name' => (string) $book->name, 'author' => (string) $book->author];
+        foreach ($booksList as $book) {
+            $books[] = (array) $book;
         }
     }
     $view->render('search.php', ['title' => 'Search', 'name' => 'joseph', 'files' => $files]);
