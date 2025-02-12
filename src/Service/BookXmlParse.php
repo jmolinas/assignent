@@ -23,6 +23,6 @@ class BookXmlParse
 
     public function getData()
     {
-        return $this->getData();
+        return $this->books;
     }
 }

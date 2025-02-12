@@ -1,5 +1,7 @@
 <?php
-
 return [
-    'host' => 'localhost'
+    'host' => 'database',
+    'database' => 'lamp',
+    'username' => 'postgres',
+    'password' => ''
 ];

@@ -29,7 +29,7 @@ class Http
         return $headers;
     }
 
-    public function imput($key = null)
+    public function input($key = null)
     {
         $header = $this->getRequestHeaders();
         if (isset($header['Content-Type']) && $header['Content-Type'] == 'application/json') {
@@ -38,16 +38,22 @@ class Http
         }
     }
 
+    public function json(array $data)
+    {
+        header('Content-Type: application/json');
+        return json_encode($data);
+    }
+
 
     public function getUrl($method = 'GET')
     {
         if ($_SERVER['REQUEST_METHOD'] !== $method) {
             return false;
         }
-        // The request url might be /project/index.php, this will remove the /project part
-        $url = (php_sapi_name() !== 'cli-server') ? str_replace(dirname($this->request['SCRIPT_NAME']), '', $this->url) : $this->url;
-        // Remove the query string if there is one
 
+        $url = $this->url;
+
+        // Remove the query string if there is one
         $queryString = strpos($url, '?');
 
         if ($queryString !== false) {
@@ -67,6 +73,7 @@ class Http
 
         // Replace multiple slashes in a url, such as /my//dir/url
         $url = preg_replace('/\/+/', '/', $url);
+
         return $url;
     }
 

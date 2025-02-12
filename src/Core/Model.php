@@ -1,9 +1,12 @@
 <?php
 class Model
 {
-    protected $table;
+    public $table;
     protected $primaryKey = 'id';
     protected $pdo;
+    protected $relations = '';
+    protected $collection = [];
+
 
     public function __construct()
     {
@@ -11,23 +14,71 @@ class Model
         $this->pdo = Database::getInstance($config['host'], $config['database'], $config['username'], $config['password'])->getPDO();
     }
 
+    protected function mapResultToProperties($data)
+    {
+        if ($data) {
+            foreach ($data as $key => $value) {
+                $this->{$key} = $value;
+            }
+        }
+    }
+
+    public function with($relation)
+    {
+        $this->relations = $relation;
+        return $this;
+    }
+
     public function find($id)
     {
         $stmt = $this->pdo->prepare("SELECT * FROM {$this->table} WHERE {$this->primaryKey} = :id");
         $stmt->execute(['id' => $id]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($result) {
+            $this->mapResultToProperties($result);
+            return $result; // Return the populated object
+        }
+        return false;
     }
 
-    public function where(array $attributes)
+    public function where($operator, array $attributes)
     {
         $conditions = [];
+        $params = [];
         foreach ($attributes as $key => $value) {
-            $conditions[] = "{$key} = :{$key}";
+            $conditions[] = "{$key} {$operator} :{$key}";
+            $params[":{$key}"] = $value;
         }
         $where = implode(' AND ', $conditions);
         $stmt = $this->pdo->prepare("SELECT * FROM {$this->table} WHERE {$where}");
-        $stmt->execute($attributes);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        $stmt->execute($params);
+        if ($results = $stmt->fetchAll(PDO::FETCH_ASSOC)) {
+            if ($relationship = $this->relations) {
+                $this->collection = $results;
+                $books = $this->$relationship();
+                foreach ($results as &$result) {
+                    $result['books'] = $books[$result['id']];
+                }
+            }
+            return $results; // Return the populated object
+        }
+        return false;
+    }
+
+    public function whereIn($column, array $values)
+    {
+        // Generate placeholders for the values
+        $placeholders = implode(', ', array_fill(0, count($values), '?'));
+
+        // Prepare and execute the query
+        $sql = "SELECT * FROM $this->table WHERE $column IN ($placeholders)";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($values);
+
+        // Fetch results
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return new static::$collection($results);
     }
 
     public function all()
@@ -40,9 +91,32 @@ class Model
     {
         $columns = implode(',', array_keys($data));
         $placeholders = ':' . implode(', :', array_keys($data));
-        $stmt = $this->pdo->prepare("INSERT INTO {$this->table} ($columns) VALUES ($placeholders)");
-        return $stmt->execute($data);
+        $returning = array_merge(['id'], array_keys($data), ['created_at']);
+        $stmt = $this->pdo->prepare("INSERT INTO {$this->table} ($columns) VALUES ($placeholders) RETURNING " . implode(', ', $returning));
+        // Execute the query
+        if ($stmt->execute($data)) {
+            // Fetch the last inserted ID
+            $data = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // Retrieve and return the inserted record
+            return $data;
+        }
     }
+
+    public function createOrUpdate(array $attributes, array $values = [])
+    {
+        $result = $this->where('=', $attributes);
+        if (! $result) {
+            return $this->create(array_merge($attributes, $values));
+        }
+
+        if (empty($values)) {
+            return false;
+        }
+        $this->update($result[0]['id'], $values);
+        return $this->find($result[0]['id']);
+    }
+
 
     public function insert(array $data)
     {
@@ -72,12 +146,14 @@ class Model
             $placeholder = implode(', ', array_fill(0, count($row), '?'));
             $column = array_keys($row);
             $placeholders[] = "({$placeholder})";
+            $updates = [];
             foreach ($column as $value) {
                 $values[] = $row[$value];
+                $updates[] = "{$value} = EXCLUDED.{$value}";
             }
         }
 
-        $sql = "INSERT INTO {$this->table} ({$columns}) VALUES " . implode(", ", $placeholders) . " ON CONFLICT ({$field}) DO UPDATE SET value = EXCLUDED.value";
+        $sql = "INSERT INTO {$this->table} ({$columns}) VALUES " . implode(", ", $placeholders) . " ON CONFLICT ({$field}) DO UPDATE SET " . implode(", ", $updates);
         $stmt = $this->pdo->prepare($sql);
         return $stmt->execute($values);
     }
@@ -95,23 +171,36 @@ class Model
         return $stmt->execute($data);
     }
 
-    public function updateOrInsert(array $attributes, array $values = [])
-    {
-        $result = $this->where($attributes);
-        if (! $result) {
-            return $this->create(array_merge($attributes, $values));
-        }
-
-        if (empty($values)) {
-            return true;
-        }
-
-        return (bool) $this->update($result->id, $values);
-    }
-
     public function delete($id)
     {
         $stmt = $this->pdo->prepare("DELETE FROM {$this->table} WHERE {$this->primaryKey} = :id");
         return $stmt->execute(['id' => $id]);
+    }
+
+    public function hasMany($relatedClass, $foreignKey, $localKey = 'id')
+    {
+        $related = new $relatedClass();
+
+        if (count($this->collection)) {
+            $values = array_column($this->collection, 'id');
+            $placeholders = implode(', ', array_fill(0, count($values), '?'));
+
+            // Prepare and execute the query
+            $sql = "SELECT * FROM {$related->table} WHERE {$foreignKey} IN ($placeholders)";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($values);
+            if ($result = $stmt->fetchAll(PDO::FETCH_ASSOC)); {
+                $grouped = [];
+                foreach ($result as $item) {
+                    $grouped[$item[$foreignKey]][] = $item;
+                }
+                return $grouped;
+            }
+            return false;
+        }
+
+        $stmt = $this->pdo->prepare("SELECT * FROM {$related->table} WHERE {$foreignKey} = :value");
+        $stmt->execute(['value' => $this->{$localKey}]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }
